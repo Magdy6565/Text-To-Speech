@@ -1,0 +1,215 @@
+\documentclass[12pt]{article}
+\usepackage[a4paper, margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{hyperref}
+
+\title{Speech to Text}
+
+\begin{document}
+\maketitle
+
+
+
+
+\section*{Introduction}
+This assignment focuses on fine-tuning the SpeechT5 model for text-to-speech tasks. Specifically, we   evaluate the model on the VoxPopuli dataset .
+
+\section*{Data Loading}
+The VoxPopuli dataset is available on HuggingFace, and we utilized its streaming functionality for efficient data handling. Specifically:
+\begin{itemize}
+\item The dataset was loaded using the HuggingFace library with the English subset selected.
+\item Pre-split training, validation, and test sets were directly accessed without additional preprocessing.
+\item The streaming mode allowed us to process the data efficiently, suitable for large-scale datasets like VoxPopuli.
+\end{itemize}
+This approach ensured that the dataset was ready for further processing and model training with minimal overhead
+
+\section*{Data Processing}
+The following steps are undertaken for data processing:
+\begin{itemize}
+\item \textbf {Set Sampling Rate:} It is important to set the sampling rate of the audio data to 16 kHz, which is the expected input format for SpeechT5. This is done by casting the "audio" column of the dataset to a 16 kHz sampling rate:
+
+\item \textbf{Text Cleaning:} Unsupported characters are identified and replaced or removed to ensure compatibility with tokenization.
+
+These were only the tokens found in training data and not in tokenizer vocab :{' ', '1'} , and as stated that tokenizer handles spaces so no need to worry we only have to replace the 1 that was found in the following training example : 
+\begin{figure}
+    \centering
+    \includegraphics[width=1\linewidth]{image.png}
+    \caption{Example containing extra tokens}
+    \label{fig:enter-label}
+\end{figure}
+\item \textbf{Speaker Analysis:} The distribution of speakers is analyzed, and the dataset is filtered to maintain a balanced representation of speakers. 
+We filtered out the speakers with less than 100 and more than 200 examples to achieve a balanced dataset. After this step, the dataset had a total of 12,568 examples with 90 unique speakers.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1\linewidth]{image2.png}
+    \caption{Distribution of speakers}
+    \label{fig:speaker-distribution}
+\end{figure}
+
+
+
+\item \textbf{Speaker Embeddings:} A pre-trained speaker embedding model is used to generate embeddings for each audio example.
+\item \textbf{Feature Preparation:} The text is tokenized using the SpeechT5 tokenizer, and audio data is converted into the appropriate format for SpeechT5.
+\item \textbf{Filtering:} Long examples are filtered out to optimize model performance.
+\end{itemize}
+
+
+\vspace{1cm}
+\vspace{1cm}
+
+\section*{RNN }
+\section{Model Architecture}
+
+The text-to-speech model is based on a Recurrent Neural Network (RNN) architecture. The main components of the model are as follows:
+
+\begin{itemize}
+    \item \textbf{Embedding Layer:} This layer maps the input text tokens (integer indices) to dense vectors of fixed dimension $d$. Let $V$ be the size of the vocabulary and $d$ the embedding dimension. The output of the embedding layer has the shape:
+    \[
+    \mathbf{E} \in \mathbb{R}^{B \times T \times d}
+    \]
+    where $B$ is the batch size, $T$ is the sequence length (number of tokens in the input), and $d$ is the embedding dimension.
+    
+    \item \textbf{RNN Layer:} The embedded text is passed through a multi-layer RNN. The RNN processes the sequence token by token and generates hidden states. Let $h_t$ represent the hidden state at time step $t$. The RNN layer computes the following for each time step $t$:
+    \[
+    h_t = f(h_{t-1}, x_t)
+    \]
+    where $x_t$ is the input at time step $t$, $h_t$ is the hidden state at time $t$, and $f$ is the RNN function. The output of the RNN is a sequence of hidden states:
+    \[
+    \mathbf{H} \in \mathbb{R}^{B \times T \times h}
+    \]
+    where $h$ is the size of the hidden state and $T$ is the sequence length.
+    
+    \item \textbf{Fully Connected Layer:} The output of the RNN is passed through a fully connected (FC) layer, which produces the predicted spectrogram. The FC layer has the following form:
+    \[
+    \mathbf{Y} = \text{FC}(\mathbf{H}) \in \mathbb{R}^{B \times T \times N}
+    \]
+    where $N$ is the number of bins in the spectrogram (e.g., $N = 80$). This represents the predicted log-mel spectrogram.
+
+\end{itemize}
+
+\section{Training Process}
+
+The model is trained using the following steps:
+
+\begin{itemize}
+    \item \textbf{Input:} The input to the model consists of tokenized text sequences. The ground truth for training is a corresponding mel-spectrogram.
+    \item \textbf{Loss Function:} The model is trained using a standard loss function, which compares the predicted spectrogram $\mathbf{Y}$ with the ground truth spectrogram. The loss is computed as:
+    \[
+    \mathcal{L} = \text{Loss}(\mathbf{Y}, \mathbf{Y_{\text{gt}}})
+    \]
+    where $\mathbf{Y_{\text{gt}}}$ is the ground truth spectrogram.
+
+\end{itemize}
+
+\section{Training Results}
+
+The model is trained for three epochs, with the following training statistics:
+
+\begin{itemize}
+    \item \textbf{Epoch 1:} Loss = 10501.76
+    \item \textbf{Epoch 2:} Loss = 10493.56
+    \item \textbf{Epoch 3:} Loss = 10489.18
+\end{itemize}
+
+The training was conducted with a batch size of $B$, using a learning rate of $\alpha$. The average batch processing speed was approximately $6.34$ batches per second.
+
+
+
+\section*{Transformer-Based Approach}
+
+In the transformer-based approach, we leverage a pre-trained SpeechT5 model, which is loaded from HuggingFace. This allows us to build upon the capabilities of a powerful model trained on large datasets, simplifying the task of text-to-speech generation.
+
+\setcounter{section}{0}  % Reset section counter to 0, so the next section will be numbered 1
+
+\section{Collator to Make Batches}
+
+To process data efficiently, we define a custom collator that combines multiple examples into a batch. The collator ensures that shorter sequences are padded with padding tokens. For the spectrogram labels, the padded portions are replaced with the special value \texttt{-100}. This special value instructs the model to ignore those parts of the spectrogram when calculating the spectrogram loss, ensuring that the padding does not affect the model's training.
+
+\section{Training Parameters}
+
+The following table outlines the key training parameters used in the Seq2SeqTrainingArguments class from the Hugging Face library to configure the training process for the model:
+
+% Add your table here
+
+\section{Vocoder Usage}
+
+Finally, after the model generates a spectrogram, the vocoder is used to convert this spectrogram into actual sound. This step is crucial for transforming the model's output into audible speech.
+
+\section{Training Process}
+
+In this section, we outline the training process used for fine-tuning the model. The training results:
+\begin{itemize}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.75\linewidth]{image66.png}
+    \caption{train/loss}
+    \label{fig:enter-label}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.75\linewidth]{image67.png}
+    \caption{eval/loss}
+    \label{fig:enter-label}
+\end{figure}
+  
+\end{itemize}
+
+\begin{table}[ht!]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Parameter} & \textbf{Value} \\ \hline
+\texttt{per\_device\_train\_batch\_size} & 16 \\ \hline
+\texttt{gradient\_accumulation\_steps} & 2 \\ \hline
+\texttt{learning\_rate} & 1e-5 \\ \hline
+\texttt{warmup\_steps} & 500 \\ \hline
+\texttt{max\_steps} & 4000 \\ \hline
+\texttt{gradient\_checkpointing} & \texttt{True} \\ \hline
+\texttt{fp16} & \texttt{True} \\ \hline
+\texttt{evaluation\_strategy} & \texttt{steps} \\ \hline
+\texttt{per\_device\_eval\_batch\_size} & 8 \\ \hline
+\texttt{save\_steps} & 1000 \\ \hline
+\texttt{eval\_steps} & 1000 \\ \hline
+\texttt{logging\_steps} & 25 \\ \hline
+\texttt{report\_to} & \texttt{[\"tensorboard\"]} \\ \hline
+\texttt{load\_best\_model\_at\_end} & \texttt{True} \\ \hline
+\texttt{greater\_is\_better} & \texttt{False} \\ \hline
+\texttt{label\_names} & \texttt{[\"labels\"]} \\ \hline
+\texttt{push\_to\_hub} & \texttt{True} \\ \hline
+\end{tabular}
+\caption{Training Parameters for the Seq2Seq Training Model}
+\end{table}
+
+\section{Mel spectrogram}
+The Mel spectrogram is a widely used representation in speech processing, including speech synthesis and speech recognition tasks. It is a type of spectrogram where the frequency axis is transformed using the Mel scale, which is based on the way humans perceive pitch. The Mel scale is designed to approximate the logarithmic way in which the human ear perceives changes in frequency, emphasizing lower frequencies and compressing higher frequencies. This transformation makes the Mel spectrogram more aligned with human auditory perception, making it an effective feature for many speech-related tasks.
+
+
+\section*{Evaluation}
+To evaluate the performance of the model, we sampled 10 examples from the dataset and compared the outputs of the fine-tuned model with those of the pretrained model. The evaluation aimed to assess the improvements in speech quality, accuracy of the predicted spectrogram, and overall model performance after fine-tuning.
+Manual evaluation will be performed to assess the quality of the generated samples to compare between the pretrained model and the finetuned one.
+
+
+
+
+\vspace{1cm}
+\vspace{1cm}
+\section*{Bonus: Web App}
+As a bonus task, a simple web app is developed to demonstrate the fine-tuned SpeechT5 model. The app includes:
+\begin{itemize}
+\item A text box for user input.
+\item A button to generate speech from the entered text using the SpeechT5 model.
+\end{itemize}
+The app is built using a Flask and integrates the SpeechT5 model for real-time text-to-speech conversion.
+\vspace{1cm}
+\vspace{1cm}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.75\linewidth]{image3.png}
+    \caption{Web App}
+    \label{fig:enter-label}
+\end{figure}
+\end{document}
